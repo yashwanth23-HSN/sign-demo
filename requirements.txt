@@ -1,0 +1,10 @@
+streamlit
+mediapipe==0.10.14
+opencv-python
+numpy
+pandas
+pyttsx3
+speechrecognition
+streamlit-webrtc
+joblib
+scikit-learn
