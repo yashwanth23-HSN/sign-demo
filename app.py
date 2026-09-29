@@ -2,9 +2,9 @@ import streamlit as st
 import json
 import os
 
-# =================================
-# PAGE CONFIG
-# =================================
+# =====================================
+# CONFIG
+# =====================================
 
 st.set_page_config(
     page_title="AI Sign Language Communication System",
@@ -12,15 +12,11 @@ st.set_page_config(
     layout="wide"
 )
 
-# =================================
+# =====================================
 # USER FILE
-# =================================
+# =====================================
 
 USER_FILE = "users.json"
-
-# =================================
-# CREATE DEFAULT USER FILE
-# =================================
 
 if not os.path.exists(USER_FILE):
 
@@ -32,38 +28,25 @@ if not os.path.exists(USER_FILE):
     }
 
     with open(USER_FILE, "w") as f:
-        json.dump(
-            default_users,
-            f,
-            indent=4
-        )
+        json.dump(default_users, f, indent=4)
 
-# =================================
-# LOAD USERS
-# =================================
+# =====================================
+# USER FUNCTIONS
+# =====================================
 
 def load_users():
 
     with open(USER_FILE, "r") as f:
         return json.load(f)
 
-# =================================
-# SAVE USERS
-# =================================
-
-def save_users(data):
+def save_users(users):
 
     with open(USER_FILE, "w") as f:
+        json.dump(users, f, indent=4)
 
-        json.dump(
-            data,
-            f,
-            indent=4
-        )
-
-# =================================
+# =====================================
 # SESSION
-# =================================
+# =====================================
 
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
@@ -74,25 +57,22 @@ if "username" not in st.session_state:
 if "role" not in st.session_state:
     st.session_state.role = ""
 
+if "page" not in st.session_state:
+    st.session_state.page = "home"
+
 users = load_users()
 
-# =================================
-# LOGIN SCREEN
-# =================================
+# =====================================
+# LOGIN
+# =====================================
 
 if not st.session_state.logged_in:
 
-    st.title(
-        "🤟 AI Sign Language Communication System"
-    )
+    st.title("🤟 AI Sign Language Communication System")
 
-    st.subheader(
-        "Login"
-    )
+    st.subheader("Login")
 
-    username = st.text_input(
-        "Username"
-    )
+    username = st.text_input("Username")
 
     password = st.text_input(
         "Password",
@@ -103,21 +83,12 @@ if not st.session_state.logged_in:
 
         if (
             username in users
-            and password ==
-            users[username]["password"]
+            and users[username]["password"] == password
         ):
 
             st.session_state.logged_in = True
-
             st.session_state.username = username
-
-            st.session_state.role = users[
-                username
-            ]["role"]
-
-            st.success(
-                "Login Successful"
-            )
+            st.session_state.role = users[username]["role"]
 
             st.rerun()
 
@@ -129,204 +100,209 @@ if not st.session_state.logged_in:
 
     st.stop()
 
-# =================================
-# SIDEBAR
-# =================================
+# =====================================
+# TOP BAR
+# =====================================
 
-st.sidebar.title("👤 User")
+col1, col2 = st.columns([8,1])
 
-st.sidebar.success(
-    f"Welcome {st.session_state.username}"
-)
+with col2:
 
-st.sidebar.write(
-    f"Role : {st.session_state.role}"
-)
+    if st.button("🚪 Logout"):
 
-# =================================
-# ADMIN CONTROLS
-# =================================
+        st.session_state.clear()
+        st.rerun()
+
+# =====================================
+# ADMIN PANEL
+# =====================================
 
 if st.session_state.role == "admin":
 
-    st.sidebar.divider()
+    with st.expander("⚙ Admin Panel"):
 
-    admin_menu = st.sidebar.selectbox(
-        "Admin Controls",
-        [
-            "Home",
-            "Add User",
-            "Delete User",
-            "Change Password",
-            "View Users"
-        ]
-    )
-
-else:
-
-    admin_menu = "Home"
-
-# =================================
-# ADD USER
-# =================================
-
-if admin_menu == "Add User":
-
-    st.title("➕ Add User")
-
-    new_user = st.text_input(
-        "Username"
-    )
-
-    new_pass = st.text_input(
-        "Password",
-        type="password"
-    )
-
-    role = st.selectbox(
-        "Role",
-        [
-            "user",
-            "admin"
-        ]
-    )
-
-    if st.button("Create User"):
-
-        if new_user in users:
-
-            st.error(
-                "User already exists"
-            )
-
-        else:
-
-            users[new_user] = {
-                "password": new_pass,
-                "role": role
-            }
-
-            save_users(users)
-
-            st.success(
-                "User Created Successfully"
-            )
-
-# =================================
-# DELETE USER
-# =================================
-
-elif admin_menu == "Delete User":
-
-    st.title("🗑 Delete User")
-
-    user_list = [
-        u
-        for u in users.keys()
-        if u != "admin"
-    ]
-
-    if len(user_list) == 0:
-
-        st.info("No users found")
-
-    else:
-
-        selected_user = st.selectbox(
-            "Select User",
-            user_list
+        admin_action = st.selectbox(
+            "Admin Action",
+            [
+                "None",
+                "View Users",
+                "Add User",
+                "Delete User",
+                "Change Password"
+            ]
         )
 
-        if st.button("Delete User"):
+        # ----------------------------
 
-            del users[selected_user]
+        if admin_action == "View Users":
 
-            save_users(users)
+            st.subheader("Users")
 
-            st.success(
-                f"{selected_user} deleted"
+            for user, info in users.items():
+
+                st.write(
+                    f"✅ {user} ({info['role']})"
+                )
+
+        # ----------------------------
+
+        elif admin_action == "Add User":
+
+            st.subheader("Add User")
+
+            username = st.text_input(
+                "New Username"
             )
 
-# =================================
-# CHANGE PASSWORD
-# =================================
+            password = st.text_input(
+                "New Password",
+                type="password"
+            )
 
-elif admin_menu == "Change Password":
+            role = st.selectbox(
+                "Role",
+                ["user", "admin"]
+            )
 
-    st.title("🔑 Change Password")
+            if st.button("Create User"):
 
-    selected_user = st.selectbox(
-        "Select User",
-        list(users.keys())
-    )
+                if username in users:
 
-    new_password = st.text_input(
-        "New Password",
-        type="password"
-    )
+                    st.error(
+                        "User already exists"
+                    )
 
-    if st.button(
-        "Update Password"
-    ):
+                else:
 
-        users[selected_user][
-            "password"
-        ] = new_password
+                    users[username] = {
+                        "password": password,
+                        "role": role
+                    }
 
-        save_users(users)
+                    save_users(users)
 
-        st.success(
-            "Password Updated"
-        )
+                    st.success(
+                        "User Created"
+                    )
 
-# =================================
-# VIEW USERS
-# =================================
+        # ----------------------------
 
-elif admin_menu == "View Users":
+        elif admin_action == "Delete User":
 
-    st.title("👥 Users")
+            available = [
+                u for u in users.keys()
+                if u != "admin"
+            ]
 
-    for user, info in users.items():
+            if available:
 
-        st.write(
-            f"✅ {user} ({info['role']})"
-        )
+                selected = st.selectbox(
+                    "Select User",
+                    available
+                )
 
-# =================================
-# HOME
-# =================================
+                if st.button("Delete User"):
 
-else:
+                    del users[selected]
+
+                    save_users(users)
+
+                    st.success(
+                        "User Deleted"
+                    )
+
+        # ----------------------------
+
+        elif admin_action == "Change Password":
+
+            selected = st.selectbox(
+                "User",
+                list(users.keys())
+            )
+
+            new_pass = st.text_input(
+                "New Password",
+                type="password"
+            )
+
+            if st.button(
+                "Update Password"
+            ):
+
+                users[selected]["password"] = new_pass
+
+                save_users(users)
+
+                st.success(
+                    "Password Updated"
+                )
+
+# =====================================
+# HOME PAGE
+# =====================================
+
+if st.session_state.page == "home":
 
     st.title(
         "🤟 AI Sign Language Communication System"
     )
 
-    st.markdown(
-        """
-### Modules
-
-✅ Dataset Collector
-
-✅ Sign To Caption & Speech
-
-✅ Speech To Sign
-
-Use the left sidebar to open pages.
-"""
+    st.success(
+        f"Welcome {st.session_state.username}"
     )
 
-# =================================
-# LOGOUT
-# =================================
+    st.divider()
 
-st.sidebar.divider()
+    col1, col2, col3 = st.columns(3)
 
-if st.sidebar.button("🚪 Logout"):
+    with col1:
 
-    st.session_state.logged_in = False
-    st.session_state.username = ""
-    st.session_state.role = ""
+        if st.button(
+            "📁 Data Collector",
+            use_container_width=True
+        ):
 
-    st.rerun()
+            st.session_state.page = "collector"
+            st.rerun()
+
+    with col2:
+
+        if st.button(
+            "🤟 Sign To Speech",
+            use_container_width=True
+        ):
+
+            st.session_state.page = "sign"
+            st.rerun()
+
+    with col3:
+
+        if st.button(
+            "🎤 Speech To Sign",
+            use_container_width=True
+        ):
+
+            st.session_state.page = "speech"
+            st.rerun()
+
+# =====================================
+# MODULE LOADING
+# =====================================
+
+elif st.session_state.page == "collector":
+
+    from modules.data_collector import show_collector
+
+    show_collector()
+
+elif st.session_state.page == "sign":
+
+    from modules.sign_to_speech import show_sign_to_speech
+
+    show_sign_to_speech()
+
+elif st.session_state.page == "speech":
+
+    from modules.speech_to_sign import show_speech_to_sign
+
+    show_speech_to_sign()

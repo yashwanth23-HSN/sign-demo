@@ -1,9 +1,9 @@
 {
-    "Yashu": {
-        "password": "Yashu23",
+    "admin": {
+        "password": "admin123",
         "role": "admin"
     },
-    "user1": {
+    "Demo1": {
         "password": "1234",
         "role": "user"
     }
