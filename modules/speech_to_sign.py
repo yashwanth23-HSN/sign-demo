@@ -1,64 +1,193 @@
 import streamlit as st
 import os
+import time
+
+try:
+    from streamlit_mic_recorder import speech_to_text
+except:
+    speech_to_text = None
+
+
+def find_sign_image(char):
+
+    char = char.upper()
+
+    for ext in [".png", ".jpg", ".jpeg"]:
+
+        path = os.path.join(
+            "SIGN_IMAGES",
+            f"{char}{ext}"
+        )
+
+        if os.path.exists(path):
+            return path
+
+    return None
 
 
 def show_speech_to_sign():
 
-    if not st.session_state.get(
-        "logged_in",
-        False
-    ):
-        st.stop()
+    st.title("🎤 Voice → Sign Language Translator")
 
-    col1, col2 = st.columns([1, 8])
+    st.markdown("""
+    ### Instructions
 
-    with col1:
+    1. Click **Start Recording**
+    2. Speak clearly
+    3. Wait for speech recognition
+    4. Signs will appear word-by-word
+    """)
 
-        if st.button("🏠 Home"):
+    if speech_to_text is None:
 
-            st.session_state.page = "home"
-            st.rerun()
+        st.error(
+            "Install:\n\npip install streamlit-mic-recorder"
+        )
 
-    st.title("🎤 Speech To Sign")
+        return
 
-    text = st.text_input(
-        "Enter Text"
+    # ---------------------------------
+    # Session State
+    # ---------------------------------
+
+    if "recognized_text" not in st.session_state:
+        st.session_state.recognized_text = ""
+
+    # ---------------------------------
+    # Recording UI
+    # ---------------------------------
+
+    st.subheader("🎙 Voice Input")
+
+    st.info(
+        "Press Start Recording and speak."
     )
+
+    text = speech_to_text(
+        language="en",
+        start_prompt="🎤 Start Recording",
+        stop_prompt="⏹ Stop Recording",
+        just_once=True,
+        use_container_width=True,
+        key="voice_input"
+    )
+
+    # Save only NEW speech
 
     if text:
 
-        text = text.upper()
+        text = text.strip().upper()
 
-        st.subheader(
-            "Generated Sign Language"
+        if text != st.session_state.recognized_text:
+
+            st.session_state.recognized_text = text
+
+    # ---------------------------------
+    # No Text Yet
+    # ---------------------------------
+
+    if not st.session_state.recognized_text:
+
+        st.warning(
+            "Waiting for speech..."
         )
 
-        cols = st.columns(5)
+        return
 
-        index = 0
+    text = st.session_state.recognized_text
 
-        for ch in text:
+    # ---------------------------------
+    # Display Detected Text
+    # ---------------------------------
 
-            if ch == " ":
-                continue
+    st.divider()
 
-            path = os.path.join(
-                "SIGN_IMAGES",
-                f"{ch}.png"
-            )
+    st.subheader("📝 Detected Sentence")
 
-            with cols[index % 5]:
+    st.success(text)
 
-                if os.path.exists(path):
+    st.divider()
+
+    st.subheader("🤟 Sign Language Translation")
+
+    words = text.split()
+
+    # ---------------------------------
+    # WORD BY WORD DISPLAY
+    # ---------------------------------
+
+    for word in words:
+
+        st.markdown(
+            f"## 📌 {word}"
+        )
+
+        letter_cols = st.columns(
+            min(len(word), 8)
+        )
+
+        for i, char in enumerate(word):
+
+            image_path = find_sign_image(char)
+
+            with letter_cols[i % len(letter_cols)]:
+
+                if image_path:
 
                     st.image(
-                        path,
-                        caption=ch,
-                        width=120
+                        image_path,
+                        width=140
                     )
+
+                    st.caption(char)
 
                 else:
 
-                    st.warning(ch)
+                    st.error(
+                        f"{char} Missing"
+                    )
 
-            index += 1
+        st.markdown("---")
+
+    # ---------------------------------
+    # Animated Playback
+    # ---------------------------------
+
+    st.subheader(
+        "▶ Animated Sign Playback"
+    )
+
+    placeholder = st.empty()
+
+    if st.button(
+        "▶ Play Entire Sentence"
+    ):
+
+        for word in words:
+
+            for char in word:
+
+                image_path = find_sign_image(char)
+
+                if image_path:
+
+                    placeholder.image(
+                        image_path,
+                        width=350
+                    )
+
+                    time.sleep(0.8)
+
+    # ---------------------------------
+    # Clear Button
+    # ---------------------------------
+
+    if st.button("🗑 Clear Translation"):
+
+        st.session_state.recognized_text = ""
+
+        st.rerun()
+
+    st.success(
+        "✅ Translation Complete"
+    )
