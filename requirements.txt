@@ -6,3 +6,6 @@ pandas==2.2.2
 scikit-learn==1.5.1
 gtts
 SpeechRecognition
+openai-whisper
+torch
+streamlit-mic-recorder 
