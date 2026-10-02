@@ -3,151 +3,89 @@ import cv2
 import mediapipe as mp
 import numpy as np
 import os
+import av
+from streamlit_webrtc import webrtc_streamer, VideoProcessorBase
 
+# ==========================================
+# Load Dataset Once
+# ==========================================
 
-def show_sign_to_speech():
+DATASET = []
 
-    # ==================================
-    # LOGIN CHECK
-    # ==================================
+DATA_DIR = "DATA"
 
-    if not st.session_state.get(
-        "logged_in",
-        False
-    ):
-        st.error("Please Login First")
-        st.stop()
+if os.path.exists(DATA_DIR):
 
-    # ==================================
-    # HOME BUTTON
-    # ==================================
+    for sign_name in os.listdir(DATA_DIR):
 
-    col1, col2 = st.columns([1, 6])
-
-    with col1:
-
-        if st.button("🏠 Home"):
-
-            st.session_state.page = "home"
-            st.rerun()
-
-    # ==================================
-    # TITLE
-    # ==================================
-
-    st.title("🤟 Sign To Caption & Speech")
-
-    DATA_DIR = "DATA"
-
-    # ==================================
-    # LOAD DATASET
-    # ==================================
-
-    dataset = []
-
-    if os.path.exists(DATA_DIR):
-
-        for sign_name in os.listdir(DATA_DIR):
-
-            sign_folder = os.path.join(
-                DATA_DIR,
-                sign_name
-            )
-
-            if os.path.isdir(sign_folder):
-
-                for file in os.listdir(sign_folder):
-
-                    if file.endswith(".npy"):
-
-                        file_path = os.path.join(
-                            sign_folder,
-                            file
-                        )
-
-                        try:
-
-                            sample = np.load(file_path)
-
-                            dataset.append(
-                                (
-                                    sign_name,
-                                    sample
-                                )
-                            )
-
-                        except Exception:
-                            pass
-
-    st.info(
-        f"Dataset Samples Loaded : {len(dataset)}"
-    )
-
-    if len(dataset) == 0:
-
-        st.warning(
-            "No dataset found. Collect samples first."
+        sign_folder = os.path.join(
+            DATA_DIR,
+            sign_name
         )
 
-        return
+        if os.path.isdir(sign_folder):
 
-    # ==================================
-    # CAMERA
-    # ==================================
+            for file in os.listdir(sign_folder):
 
-    photo = st.camera_input(
-        "Show Sign"
-    )
+                if file.endswith(".npy"):
 
-    if photo is None:
-        return
+                    try:
 
-    # ==================================
-    # IMAGE TO ARRAY
-    # ==================================
+                        sample = np.load(
+                            os.path.join(
+                                sign_folder,
+                                file
+                            )
+                        )
 
-    bytes_data = photo.getvalue()
+                        DATASET.append(
+                            (
+                                sign_name,
+                                sample
+                            )
+                        )
 
-    np_arr = np.frombuffer(
-        bytes_data,
-        np.uint8
-    )
+                    except:
 
-    image = cv2.imdecode(
-        np_arr,
-        cv2.IMREAD_COLOR
-    )
+                        pass
 
-    # ==================================
-    # MEDIAPIPE
-    # ==================================
+# ==========================================
+# Video Processor
+# ==========================================
 
-    landmarks = []
+class SignProcessor(VideoProcessorBase):
 
-    hand_detected = False
+    def __init__(self):
 
-    mp_hands = mp.solutions.hands
+        self.caption = "Waiting..."
 
-    with mp_hands.Hands(
-        static_image_mode=True,
-        max_num_hands=1,
-        min_detection_confidence=0.5
-    ) as hands:
+        self.mp_hands = mp.solutions.hands
+
+        self.hands = self.mp_hands.Hands(
+            static_image_mode=False,
+            max_num_hands=1,
+            min_detection_confidence=0.5,
+            min_tracking_confidence=0.5
+        )
+
+    def recv(self, frame):
+
+        image = frame.to_ndarray(
+            format="bgr24"
+        )
 
         rgb = cv2.cvtColor(
             image,
             cv2.COLOR_BGR2RGB
         )
 
-        results = hands.process(rgb)
+        results = self.hands.process(rgb)
 
         if results.multi_hand_landmarks:
 
-            hand_detected = True
+            landmarks = []
 
-            hand = (
-                results.multi_hand_landmarks[0]
-            )
+            hand = results.multi_hand_landmarks[0]
 
             for lm in hand.landmark:
 
@@ -159,119 +97,107 @@ def show_sign_to_speech():
                     ]
                 )
 
-    if not hand_detected:
+            captured = np.array(
+                landmarks,
+                dtype=np.float32
+            )
+
+            best_distance = float("inf")
+            best_sign = None
+
+            for sign_name, sample in DATASET:
+
+                if len(sample) != len(captured):
+                    continue
+
+                distance = np.linalg.norm(
+                    captured - sample
+                )
+
+                if distance < best_distance:
+
+                    best_distance = distance
+                    best_sign = sign_name
+
+            THRESHOLD = 1.5
+
+            if (
+                best_sign is not None
+                and best_distance < THRESHOLD
+            ):
+
+                self.caption = best_sign
+
+                cv2.putText(
+                    image,
+                    best_sign,
+                    (20, 50),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    1,
+                    (0, 255, 0),
+                    2
+                )
+
+            else:
+
+                self.caption = "SIGN NOT FOUND"
+
+        return av.VideoFrame.from_ndarray(
+            image,
+            format="bgr24"
+        )
+
+# ==========================================
+# Main Function
+# ==========================================
+
+def show_sign_to_speech():
+
+    if not st.session_state.get(
+        "logged_in",
+        False
+    ):
+        st.stop()
+
+    col1, col2 = st.columns([1, 6])
+
+    with col1:
+
+        if st.button("🏠 Home"):
+
+            st.session_state.page = "home"
+            st.rerun()
+
+    st.title("🤟 Live Sign Translation")
+
+    if len(DATASET) == 0:
 
         st.error(
-            "❌ No Hand Detected"
+            "No sign dataset available."
         )
 
         return
 
-    st.success(
-        "✅ Hand Detected"
+    st.info(
+        f"Loaded Samples : {len(DATASET)}"
     )
-
-    # ==================================
-    # COMPARE DATASET
-    # ==================================
-
-    captured = np.array(
-        landmarks,
-        dtype=np.float32
-    )
-
-    best_distance = float("inf")
-
-    predicted_sign = None
-
-    for sign_name, sample in dataset:
-
-        if len(sample) != len(captured):
-            continue
-
-        distance = np.linalg.norm(
-            captured - sample
-        )
-
-        if distance < best_distance:
-
-            best_distance = distance
-
-            predicted_sign = sign_name
 
     st.write(
-        f"Similarity Score : {best_distance:.4f}"
+        """
+        Click START.
+
+        Show your sign in front
+        of the camera.
+
+        Live caption will appear.
+        """
     )
 
-    # ==================================
-    # THRESHOLD
-    # ==================================
-
-    THRESHOLD = 1.5
-
-    if (
-        predicted_sign is not None
-        and best_distance < THRESHOLD
-    ):
-
-        st.success(
-            f"✅ Caption : {predicted_sign}"
-        )
-
-        st.subheader("🔊 Speech Output")
-
-        st.info(predicted_sign)
-
-        # Local speech only
-
-        if st.button("🔊 Speak"):
-
-            try:
-
-                import pyttsx3
-
-                engine = pyttsx3.init()
-
-                engine.say(predicted_sign)
-
-                engine.runAndWait()
-
-                st.success(
-                    "Speech Played"
-                )
-
-            except Exception:
-
-                st.warning(
-                    "Speech output works only on local desktop."
-                )
-
-    else:
-
-        st.error(
-            "❌ SIGN NOT FOUND"
-        )
-
-        st.warning(
-            "Dataset does not contain this sign."
-        )
-
-        col1, col2 = st.columns(2)
-
-        with col1:
-
-            if st.button(
-                "➕ Add New Sign"
-            ):
-
-                st.session_state.page = "collector"
-
-                st.rerun()
-
-        with col2:
-
-            if st.button(
-                "🔄 Try Again"
-            ):
-
-                st.rerun()
+    webrtc_streamer(
+        key="sign-language",
+        video_processor_factory=SignProcessor,
+        media_stream_constraints={
+            "video": True,
+            "audio": False
+        }
+    )
